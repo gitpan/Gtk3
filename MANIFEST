@@ -1,0 +1,13 @@
+LICENSE
+MANIFEST
+META.yml
+Makefile.PL
+NEWS
+README
+dist.ini
+lib/Gtk3.pm
+perl-Gtk3.doap
+t/00-init.t
+t/floating-refs.t
+t/inc/setup.pl
+t/overrides.t
