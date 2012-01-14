@@ -11,3 +11,5 @@ t/00-init.t
 t/floating-refs.t
 t/inc/setup.pl
 t/overrides.t
+t/zz-GtkCellLayoutIface.t
+t/zz-GtkCellRendererIface.t

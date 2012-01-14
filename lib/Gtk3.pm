@@ -1,6 +1,6 @@
 package Gtk3;
 {
-  $Gtk3::VERSION = '0.002';
+  $Gtk3::VERSION = '0.003';
 }
 
 use strict;
@@ -14,12 +14,22 @@ our @ISA = qw(Exporter);
 my $_GTK_BASENAME = 'Gtk';
 my $_GTK_VERSION = '3.0';
 my $_GTK_PACKAGE = 'Gtk3';
+
+my %_GTK_NAME_CORRECTIONS = (
+  'Gtk3::stock_add' => 'Gtk3::Stock::add',
+  'Gtk3::stock_add_static' => 'Gtk3::Stock::add_static',
+  'Gtk3::stock_list_ids' => 'Gtk3::Stock::list_ids',
+  'Gtk3::stock_lookup' => 'Gtk3::Stock::lookup',
+  'Gtk3::stock_set_translate_func' => 'Gtk3::Stock::set_translate_func',
+);
 my @_GTK_FLATTEN_ARRAY_REF_RETURN_FOR = qw/
   Gtk3::CellLayout::get_cells
+  Gtk3::Stock::list_ids
   Gtk3::TreePath::get_indices
   Gtk3::Window::list_toplevels
 /;
 my @_GTK_HANDLE_SENTINEL_BOOLEAN_FOR = qw/
+  Gtk3::Stock::lookup
   Gtk3::TreeModel::get_iter
   Gtk3::TreeModel::get_iter_first
   Gtk3::TreeModel::get_iter_from_string
@@ -46,6 +56,7 @@ sub import {
     basename => $_GTK_BASENAME,
     version => $_GTK_VERSION,
     package => $_GTK_PACKAGE,
+    name_corrections => \%_GTK_NAME_CORRECTIONS,
     flatten_array_ref_return_for => \@_GTK_FLATTEN_ARRAY_REF_RETURN_FOR,
     handle_sentinel_boolean_for => \@_GTK_HANDLE_SENTINEL_BOOLEAN_FOR);
 
@@ -249,10 +260,13 @@ sub Gtk3::Window::new {
 
 sub _common_tree_model_new {
   my ($package, $class, @types) = @_;
-  local $@;
-  my $real_types = (@types == 1 && eval { @{$types[0]} })
-                 ? $types[0]
-                 : \@types;
+  my $real_types;
+  {
+    local $@;
+    $real_types = (@types == 1 && eval { @{$types[0]} })
+                ? $types[0]
+                : \@types;
+  }
   return Glib::Object::Introspection->invoke (
     $_GTK_BASENAME, $package, 'new',
     $class, $real_types);
@@ -261,8 +275,13 @@ sub _common_tree_model_new {
 sub _common_tree_model_set {
   my ($package, $model, $iter, @columns_and_values) = @_;
   my (@columns, @values);
-  local $@;
-  if (@columns_and_values == 2 && eval { @{$columns_and_values[0]} }) {
+  my $have_array_refs;
+  {
+    local $@;
+    $have_array_refs =
+      @columns_and_values == 2 && eval { @{$columns_and_values[0]} };
+  }
+  if ($have_array_refs) {
     @columns = @{$columns_and_values[0]};
     @values = @{$columns_and_values[1]};
   } elsif (@columns_and_values % 2 == 0) {
