@@ -21,9 +21,10 @@ my %WriteMakefileArgs = (
   "NAME" => "Gtk3",
   "PREREQ_PM" => {
     "Cairo::GObject" => "1.000",
-    "Glib::Object::Introspection" => "0.002"
+    "Glib" => "1.260",
+    "Glib::Object::Introspection" => "0.009"
   },
-  "VERSION" => "0.005",
+  "VERSION" => "0.006",
   "test" => {
     "TESTS" => "t/*.t"
   }

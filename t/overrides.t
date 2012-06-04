@@ -5,7 +5,7 @@ BEGIN { require './t/inc/setup.pl' };
 use strict;
 use warnings;
 
-plan tests => 61;
+plan tests => 79;
 
 # Gtk3::CHECK_VERSION and check_version
 {
@@ -56,15 +56,42 @@ SKIP: {
 
 # Gtk3::Menu::popup and popup_for_device
 {
-  my $menu = Gtk3::Menu->new;
-  my $position_callback = sub {
-    my ($menu, $data) = @_;
-    isa_ok ($menu, "Gtk3::Menu");
-    return @$data;
-  };
-  $menu->popup (undef, undef, undef, undef, 1, 0);
-  $menu->popup (undef, undef, $position_callback, [50, 50], 1, 0);
-  $menu->popup_for_device (undef, undef, undef, $position_callback, [50, 50, Glib::TRUE], 1, 0);
+  {
+    my $menu = Gtk3::Menu->new;
+    my $position_callback = sub {
+      my ($menu, $data) = @_;
+      isa_ok ($menu, "Gtk3::Menu");
+      return @$data;
+    };
+    $menu->popup (undef, undef, $position_callback, [50, 50], 1, 0);
+    $menu->popup_for_device (undef, undef, undef, $position_callback, [50, 50, Glib::TRUE], 1, 0);
+  }
+
+  # Test this separately to ensure that specifying no callback does not lead to
+  # an invalid invocation of the destroy notify func.
+  {
+    my $menu = Gtk3::Menu->new;
+    $menu->popup (undef, undef, undef, undef, 1, 0);
+  }
+}
+
+# Gtk2::MenuItem::new, Gtk2::CheckMenuItem::new, Gtk2::ImageMenuItem::new
+{
+  foreach my $class (qw/Gtk3::MenuItem Gtk3::CheckMenuItem Gtk3::ImageMenuItem/) {
+    my $item;
+
+    $item = $class->new;
+    isa_ok ($item, $class);
+    ok (!$item->get_label); # might be '' or undef
+
+    $item = $class->new ('_Test');
+    isa_ok ($item, $class);
+    is ($item->get_label, '_Test');
+
+    $item = $class->new_with_mnemonic ('_Test');
+    isa_ok ($item, $class);
+    is ($item->get_label, '_Test');
+  }
 }
 
 # Gtk3::Stock
