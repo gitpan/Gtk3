@@ -5,7 +5,7 @@ BEGIN { require './t/inc/setup.pl' };
 use strict;
 use warnings;
 
-plan tests => 79;
+plan tests => 80;
 
 # Gtk3::CHECK_VERSION and check_version
 {
@@ -20,6 +20,28 @@ plan tests => 79;
   ok (!Gtk3->CHECK_VERSION ($x, $y, $z));
   ok (defined Gtk3::check_version ($x, $y, $z));
   ok (defined Gtk3->check_version ($x, $y, $z));
+}
+
+# Gtk3::Window::new and list_toplevels.  This is at the top to avoid testing
+# against a polluted list of toplevels.
+{
+  my $window1 = Gtk3::Window->new ('toplevel');
+  my $window2 = Gtk3::Window->new;
+  is_deeply ([Gtk3::Window::list_toplevels ()], [$window1, $window2]);
+  is (scalar Gtk3::Window::list_toplevels (), $window2);
+}
+
+# Gtk3::show_about_dialog
+{
+  my %props = (program_name => 'Foo',
+               version => '42',
+               authors => [qw/me myself i/],
+               license_type => 'lgpl-2-1');
+  Gtk3::show_about_dialog (undef, %props);
+  Gtk3->show_about_dialog (undef, %props);
+  Gtk3::show_about_dialog (Gtk3::Window->new, %props);
+  Gtk3->show_about_dialog (Gtk3::Window->new, %props);
+  ok (1);
 }
 
 # Gtk3::CellLayout::get_cells
@@ -55,7 +77,10 @@ SKIP: {
 }
 
 # Gtk3::Menu::popup and popup_for_device
-{
+SKIP: {
+  skip 'incorrect annotations for menu position callbacks', 2
+    unless Gtk3::CHECK_VERSION (3, 2, 0);
+
   {
     my $menu = Gtk3::Menu->new;
     my $position_callback = sub {
@@ -213,18 +238,11 @@ SKIP: {
   isa_ok ($sel_iter, 'Gtk3::TreeIter');
 }
 
-# Gtk3::Window::new and list_toplevels
-{
-  my $window1 = Gtk3::Window->new ('toplevel');
-  my $window2 = Gtk3::Window->new;
-  is_deeply ([Gtk3::Window::list_toplevels ()], [$window1, $window2]);
-  is (scalar Gtk3::Window::list_toplevels (), $window2);
-}
-
 # Gtk3::Gdk::Window::new
 SKIP: {
-  # FIXME: https://bugzilla.gnome.org/show_bug.cgi?id=670369
-  skip 'window attr type annotation missing', 3;
+  # https://bugzilla.gnome.org/show_bug.cgi?id=670369
+  skip 'window attr type annotation missing', 3
+    unless Gtk3::CHECK_VERSION (3, 6, 0);
 
   my $window = Gtk3::Gdk::Window->new (undef, {
     window_type => 'toplevel',
