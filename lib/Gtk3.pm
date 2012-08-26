@@ -1,6 +1,6 @@
 package Gtk3;
 {
-  $Gtk3::VERSION = '0.007';
+  $Gtk3::VERSION = '0.008';
 }
 
 use strict;
@@ -28,6 +28,8 @@ my $_PANGO_BASENAME = 'Pango';
 my $_PANGO_VERSION = '1.0';
 my $_PANGO_PACKAGE = 'Pango';
 
+# - gtk customization ------------------------------------------------------- #
+
 my %_GTK_NAME_CORRECTIONS = (
   'Gtk3::stock_add' => 'Gtk3::Stock::add',
   'Gtk3::stock_add_static' => 'Gtk3::Stock::add_static',
@@ -41,6 +43,8 @@ my @_GTK_FLATTEN_ARRAY_REF_RETURN_FOR = qw/
   Gtk3::CellLayout::get_cells
   Gtk3::Stock::list_ids
   Gtk3::TreePath::get_indices
+  Gtk3::UIManager::get_action_groups
+  Gtk3::UIManager::get_toplevels
   Gtk3::Window::list_toplevels
 /;
 my @_GTK_HANDLE_SENTINEL_BOOLEAN_FOR = qw/
@@ -56,9 +60,90 @@ my @_GTK_HANDLE_SENTINEL_BOOLEAN_FOR = qw/
   Gtk3::TreeSelection::get_selected
 /;
 
+# - gdk customization ------------------------------------------------------- #
+
+my @_GDK_HANDLE_SENTINEL_BOOLEAN_FOR = qw/
+  Gtk3::Gdk::Event::get_axis
+  Gtk3::Gdk::Event::get_button
+  Gtk3::Gdk::Event::get_click_count
+  Gtk3::Gdk::Event::get_coords
+  Gtk3::Gdk::Event::get_keycode
+  Gtk3::Gdk::Event::get_keyval
+  Gtk3::Gdk::Event::get_scroll_direction
+  Gtk3::Gdk::Event::get_scroll_deltas
+  Gtk3::Gdk::Event::get_state
+  Gtk3::Gdk::Event::get_root_coords
+/;
+my %_GDK_REBLESSERS = (
+  'Gtk3::Gdk::Event' => \&Gtk3::Gdk::Event::_rebless,
+);
+
+my %_GDK_TYPE_TO_PACKAGE = (
+  'expose' => 'Expose',
+  'motion-notify' => 'Motion',
+  'button-press' => 'Button',
+  'button-2press' => 'Button',
+  'button-3press' => 'Button',
+  'button-release' => 'Button',
+  'key-press' => 'Key',
+  'key-release' => 'Key',
+  'enter-notify' => 'Crossing',
+  'leave-notify' => 'Crossing',
+  'focus-change' => 'Focus',
+  'configure' => 'Configure',
+  'property-notify' => 'Property',
+  'selection-clear' => 'Selection',
+  'selection-request' => 'Selection',
+  'selection-notify' => 'Selection',
+  'proximity-in' => 'Proximity',
+  'proximity-out' => 'Proximity',
+  'drag-enter' => 'DND',
+  'drag-leave' => 'DND',
+  'drag-motion' => 'DND',
+  'drag-status' => 'DND',
+  'drop-start' => 'DND',
+  'drop-finished' => 'DND',
+  'client-event' => 'Client',
+  'visibility-notify' => 'Visibility',
+  'no-expose' => 'NoExpose',
+  'scroll' => 'Scroll',
+  'window-state' => 'WindowState',
+  'setting' => 'Setting',
+  'owner-change' => 'OwnerChange',
+  'grab-broken' => 'GrabBroken',
+  'damage' => 'Expose',
+  # added in 3.4:
+  'touch-begin' => 'Touch',
+  'touch-update' => 'Touch',
+  'touch-end' => 'Touch',
+  'touch-cancel' => 'Touch',
+);
+
+# Make all of the above sub-types inherit from Gtk3::Gdk::Event.
+{
+  no strict qw(refs);
+  my %seen;
+  foreach (grep { !$seen{$_}++ } values %_GDK_TYPE_TO_PACKAGE) {
+    push @{'Gtk3::Gdk::Event' . $_ . '::ISA'}, 'Gtk3::Gdk::Event';
+  }
+}
+
+sub Gtk3::Gdk::Event::_rebless {
+  my ($event) = @_;
+  my $package = 'Gtk3::Gdk::Event';
+  if (exists $_GDK_TYPE_TO_PACKAGE{$event->type}) {
+    $package .= $_GDK_TYPE_TO_PACKAGE{$event->type};
+  }
+  return bless $event, $package;
+}
+
+# - gdk-pixbuf customization ------------------------------------------------ #
+
 my @_GDK_PIXBUF_FLATTEN_ARRAY_REF_RETURN_FOR = qw/
   Gtk3::Gdk::Pixbuf::get_formats
 /;
+
+# - Wiring ------------------------------------------------------------------ #
 
 sub import {
   my $class = shift;
@@ -74,7 +159,9 @@ sub import {
   Glib::Object::Introspection->setup (
     basename => $_GDK_BASENAME,
     version => $_GDK_VERSION,
-    package => $_GDK_PACKAGE);
+    package => $_GDK_PACKAGE,
+    handle_sentinel_boolean_for => \@_GDK_HANDLE_SENTINEL_BOOLEAN_FOR,
+    reblessers => \%_GDK_REBLESSERS);
 
   Glib::Object::Introspection->setup (
     basename => $_GDK_PIXBUF_BASENAME,
@@ -86,6 +173,9 @@ sub import {
     basename => $_PANGO_BASENAME,
     version => $_PANGO_VERSION,
     package => $_PANGO_PACKAGE);
+
+  Glib::Object::Introspection->_register_boxed_synonym (
+    "cairo", "RectangleInt", "gdk_rectangle_get_type");
 
   my $init = 0;
   my @unknown_args = ($class);
@@ -469,6 +559,13 @@ sub Gtk3::CheckMenuItem::new {
     $_GTK_BASENAME, 'CheckMenuItem', 'new', @_);
 }
 
+sub Gtk3::CssProvider::load_from_data {
+  my ($self, $data) = @_;
+  return Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'CssProvider', 'load_from_data',
+    $self, _unpack_unless_array_ref ($data));
+}
+
 sub Gtk3::HBox::new {
   my ($class, $homogeneous, $spacing) = @_;
   $homogeneous = 5 unless defined $homogeneous;
@@ -556,6 +653,26 @@ sub Gtk3::MessageDialog::new {
   return $dialog;
 }
 
+# Gtk3::RadioMenuItem constructors.
+{
+  no strict qw(refs);
+  foreach my $ctor (qw/new new_with_label new_with_mnemonic/) {
+    *{'Gtk3::RadioMenuItem::' . $ctor} = sub {
+      my ($class, $group_or_member, @rest) = @_;
+      my $real_ctor = $ctor;
+      {
+        local $@;
+        if (eval { $group_or_member->isa ('Gtk3::RadioMenuItem') }) {
+          $real_ctor .= '_from_widget';
+        }
+      }
+      return Glib::Object::Introspection->invoke (
+        $_GTK_BASENAME, 'RadioMenuItem', $real_ctor,
+        $class, $group_or_member, @rest);
+    }
+  }
+}
+
 sub Gtk3::TreeModel::get {
   my ($model, $iter, @columns) = @_;
   my @values = map { $model->get_value ($iter, $_) } @columns;
@@ -635,6 +752,13 @@ sub Gtk3::TreeViewColumn::new_with_attributes {
   return $object;
 }
 
+sub Gtk3::UIManager::add_ui_from_string {
+  my ($manager, $string) = @_;
+  return Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'UIManager', 'add_ui_from_string',
+    $manager, $string, length $string);
+}
+
 sub Gtk3::VBox::new {
   my ($class, $homogeneous, $spacing) = @_;
   $homogeneous = 5 unless defined $homogeneous;
@@ -682,13 +806,7 @@ sub Gtk3::Gdk::Pixbuf::new_from_data {
   my ($class, $data, $colorspace, $has_alpha, $bits_per_sample, $width, $height, $rowstride) = @_;
   # FIXME: do we need to keep $real_data alive and then release it in a destroy
   # notify callback?
-  my $real_data;
-  {
-    local $@;
-    $real_data = (eval { @{$data} })
-               ? $data
-               : [unpack 'C*', $data];
-  }
+  my $real_data = _unpack_unless_array_ref ($data);
   return Glib::Object::Introspection->invoke (
     $_GDK_PIXBUF_BASENAME, 'Pixbuf', 'new_from_data',
     $class, $real_data, $colorspace, $has_alpha, $bits_per_sample, $width, $height, $rowstride,
@@ -698,16 +816,9 @@ sub Gtk3::Gdk::Pixbuf::new_from_data {
 sub Gtk3::Gdk::Pixbuf::new_from_inline {
   my ($class, $data, $copy_pixels) = @_;
   $copy_pixels = Glib::TRUE unless defined $copy_pixels;
-  my $real_data;
-  {
-    local $@;
-    $real_data = (eval { @{$data} })
-               ? $data
-               : [unpack 'C*', $data];
-  }
   return Glib::Object::Introspection->invoke (
     $_GDK_PIXBUF_BASENAME, 'Pixbuf', 'new_from_inline',
-    $class, $real_data, $copy_pixels);
+    $class, _unpack_unless_array_ref ($data), $copy_pixels);
 }
 
 sub Gtk3::Gdk::Pixbuf::new_from_xpm_data {
@@ -819,6 +930,14 @@ sub _unpack_columns_and_values {
   return (\@columns, \@values);
 }
 
+sub _unpack_unless_array_ref {
+  my ($data) = @_;
+  local $@;
+  return defined eval { @{$data} }
+    ? $data
+    : [unpack 'C*', $data];
+}
+
 sub _rest_to_ref {
   my ($rest) = @_;
   local $@;
@@ -893,6 +1012,10 @@ Gtk2::Gdk::Keysyms{XYZ} >>, use C<< Gtk3::Gdk::KEY_XYZ >>.
 =item * The Gtk2::Pango compatibility wrapper was not carried over; simply use
 the namespace "Pango" everywhere.  It gets set up automatically when loading
 L<Gtk3>.
+
+=item * The types Gtk2::Allocation and Gtk2::Gdk::Rectangle are now aliases for
+Cairo::RectangleInt, and as such they are represented as plain hashes with
+keys 'width', 'height', 'x' and 'y'.
 
 =item * The Gtk3::Menu menu position callback passed to popup() does not
 receive x and y parameters anymore.

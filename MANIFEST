@@ -11,7 +11,10 @@ t/00-init.t
 t/floating-refs.t
 t/inc/setup.pl
 t/overrides.t
+t/signals.t
+t/zz-GdkEvent.t
 t/zz-GtkActionGroup.t
 t/zz-GtkBuilder.t
 t/zz-GtkCellLayoutIface.t
 t/zz-GtkCellRendererIface.t
+t/zz-GtkRadioMenuItem.t

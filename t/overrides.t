@@ -5,7 +5,7 @@ BEGIN { require './t/inc/setup.pl' };
 use strict;
 use warnings;
 
-plan tests => 80;
+plan tests => 87;
 
 # Gtk3::CHECK_VERSION and check_version
 {
@@ -53,6 +53,19 @@ plan tests => 80;
   $cell->pack_start($one, 0);
   $cell->pack_start($two, 1);
   is_deeply([$cell->get_cells], [$one, $two]);
+}
+
+# Gtk3::CssProvider
+{
+  my $css = "GtkButton {font: Cantarelll 10}";
+  my $expect = qr/Cantarelll/;
+  my $p = Gtk3::CssProvider->new;
+
+  $p->load_from_data ($css);
+  like ($p->to_string, $expect);
+
+  $p->load_from_data ([unpack 'C*', $css]);
+  like ($p->to_string, $expect);
 }
 
 # Gtk3::ListStore::new, set and get
@@ -236,6 +249,44 @@ SKIP: {
   my ($sel_model, $sel_iter) = $selection->get_selected;
   is ($sel_model, $model);
   isa_ok ($sel_iter, 'Gtk3::TreeIter');
+}
+
+# Gtk3::UIManager
+{
+  my $ui_manager = Gtk3::UIManager->new;
+  my $ui_info = <<__EOD__;
+<ui>
+  <menubar name='MenuBar'>
+    <menu action='HelpMenu'>
+      <menuitem action='About'/>
+    </menu>
+  </menubar>
+  <menubar name='MenuBla'>
+    <menu action='HelpMenu'>
+      <menuitem action='License'/>
+    </menu>
+  </menubar>
+</ui>
+__EOD__
+  ok ($ui_manager->add_ui_from_string ($ui_info) != 0);
+
+  my $group_one = Gtk3::ActionGroup->new ("Barney");
+  my $group_two = Gtk3::ActionGroup->new ("Fred");
+  my @entries = (
+    [ "HelpMenu", undef, "_Help" ],
+    [ "About", undef, "_About", "<control>A", "About" ],
+    [ "License", undef, "_License", "<control>L", "License" ],
+  );
+  $group_one->add_actions (\@entries, undef);
+  $ui_manager->insert_action_group ($group_one, 0);
+  $ui_manager->insert_action_group ($group_two, 1);
+  is_deeply ([$ui_manager->get_action_groups], [$group_one, $group_two]);
+
+  $ui_manager->ensure_update;
+  my @menubars = $ui_manager->get_toplevels ("menubar");
+  is (@menubars, 2);
+  isa_ok ($menubars[0], "Gtk3::MenuBar");
+  isa_ok ($menubars[1], "Gtk3::MenuBar");
 }
 
 # Gtk3::Gdk::Window::new
