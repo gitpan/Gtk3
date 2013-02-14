@@ -1,3 +1,26 @@
+Overview of changes in Gtk3 0.009 [2013-02-14]
+==============================================
+
+* Add overrides for Gtk3::Container.
+* Add overrides for Gtk3::Dialog and Gtk3::InfoBar, including the conversion of
+  predefined response IDs to nick names.
+* Add overrides for Gtk3::Editable.
+* Add overrides for Gtk3::FileChooserDialog.
+* Add overrides for Gtk3::RecentChooserDialog.
+* Add overrides for Gtk3::TextBuffer.
+* Add overrides for Gtk3::ListStore's and Gtk3::TreeStore's
+  insert_with_values().
+* Add more overrides for Gtk3::TreeView and friends.
+* Add overrides for various button constructors.
+* Add an override for Gtk3::main_level.
+* Add Gtk3::EVENT_PROPAGATE and Gtk3::EVENT_STOP.
+* In Gtk3::TreeModel::get, if no columns are specified, use all columns.
+* Test that no double-frees occur for custom Gtk3::Widget subclasses.
+* Add overrides for Gtk3::Gdk::Atom.
+* Add overrides for Gtk3::Gdk::RGBA.
+* Make Gtk3::Gdk::Pixbuf::save, save_to_buffer and save_to_callback usable.
+* Fix test failures on older versions of gtk+.
+
 Overview of changes in Gtk3 0.008 [2012-08-26]
 ==============================================
 

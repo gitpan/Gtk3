@@ -10,7 +10,7 @@ use warnings;
 plan tests => 11;
 
 SKIP: {
-  skip 'the list-based API is broken currently', 9
+  skip 'list-based API; it is broken currently', 9
     unless 0; # FIXME: <https://bugzilla.gnome.org/show_bug.cgi?id=679563>
 
   my $item_one = Gtk3::RadioMenuItem -> new();
@@ -44,10 +44,14 @@ SKIP: {
 }
 
 SKIP: {
-  skip 'the item-based API is not bootstrap-able', 2
-    unless 0; # FIXME: <https://bugzilla.gnome.org/show_bug.cgi?id=679563>
+  skip 'item-based API; missing annotations', 2
+    unless Gtk3::CHECK_VERSION (3, 6, 0);
 
-  my $item_one = Gtk3::RadioMenuItem -> new_from_widget(undef);
+  # FIXME: The item-based API is not bootstrap-able on its own yet, see
+  # <https://bugzilla.gnome.org/show_bug.cgi?id=679563>.
+  # my $item_one = Gtk3::RadioMenuItem -> new_from_widget(undef);
+
+  my $item_one = Gtk3::RadioMenuItem -> new([]);
   my $item_two = Gtk3::RadioMenuItem -> new($item_one);
   my $item_three = Gtk3::RadioMenuItem -> new_with_label($item_one, "Bla");
   my $item_four = Gtk3::RadioMenuItem -> new_with_mnemonic($item_one, "_Bla");

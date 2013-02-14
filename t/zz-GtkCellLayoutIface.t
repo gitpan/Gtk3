@@ -6,7 +6,7 @@ use strict;
 use warnings;
 use Glib ':constants';
 
-plan tests => 29;
+plan tests => 35;
 
 my $cell = Gtk3::CellRendererText->new ();
 
@@ -16,6 +16,7 @@ $layout->pack_end ($cell, FALSE);
 $layout->clear ();
 $layout->add_attribute ($cell, text => 42);
 $layout->clear_attributes ($cell);
+$layout->set_attributes ($cell, text => 42);
 $layout->reorder ($cell, 42);
 
 my @cells = $layout->get_cells ();
@@ -109,5 +110,5 @@ sub GET_CELLS {
   $self->{cell_one} = Gtk3::CellRendererText->new;
   $self->{cell_two} = Gtk3::CellRendererToggle->new;
   my @list = grow_the_stack();
-  return [$self->{cell_one}, $self->{cell_two}]; # FIXME: list instead of array ref?
+  return [$self->{cell_one}, $self->{cell_two}];
 }

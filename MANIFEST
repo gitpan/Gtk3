@@ -12,9 +12,16 @@ t/floating-refs.t
 t/inc/setup.pl
 t/overrides.t
 t/signals.t
+t/vfuncs.t
 t/zz-GdkEvent.t
 t/zz-GtkActionGroup.t
 t/zz-GtkBuilder.t
 t/zz-GtkCellLayoutIface.t
 t/zz-GtkCellRendererIface.t
+t/zz-GtkContainer.t
+t/zz-GtkDialog.t
+t/zz-GtkInfoBar.t
 t/zz-GtkRadioMenuItem.t
+t/zz-GtkRecentChooserDialog.t
+t/zz-GtkTextBuffer.t
+t/zz-GtkTreeModelIface.t

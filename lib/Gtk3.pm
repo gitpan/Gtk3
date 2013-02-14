@@ -1,6 +1,6 @@
 package Gtk3;
 {
-  $Gtk3::VERSION = '0.008';
+  $Gtk3::VERSION = '0.009';
 }
 
 use strict;
@@ -41,14 +41,17 @@ my @_GTK_FLATTEN_ARRAY_REF_RETURN_FOR = qw/
   Gtk3::ActionGroup::list_actions
   Gtk3::Builder::get_objects
   Gtk3::CellLayout::get_cells
+  Gtk3::Container::get_children
   Gtk3::Stock::list_ids
   Gtk3::TreePath::get_indices
+  Gtk3::TreeView::get_columns
   Gtk3::UIManager::get_action_groups
   Gtk3::UIManager::get_toplevels
   Gtk3::Window::list_toplevels
 /;
 my @_GTK_HANDLE_SENTINEL_BOOLEAN_FOR = qw/
   Gtk3::Stock::lookup
+  Gtk3::TextBuffer::get_selection_bounds
   Gtk3::TreeModel::get_iter
   Gtk3::TreeModel::get_iter_first
   Gtk3::TreeModel::get_iter_from_string
@@ -58,7 +61,47 @@ my @_GTK_HANDLE_SENTINEL_BOOLEAN_FOR = qw/
   Gtk3::TreeModelFilter::convert_child_iter_to_iter
   Gtk3::TreeModelSort::convert_child_iter_to_iter
   Gtk3::TreeSelection::get_selected
+  Gtk3::TreeView::get_dest_row_at_pos
+  Gtk3::TreeView::get_path_at_pos
+  Gtk3::TreeView::get_tooltip_context
+  Gtk3::TreeView::get_visible_range
+  Gtk3::TreeViewColumn::cell_get_position
 /;
+my @_GTK_USE_GENERIC_SIGNAL_MARSHALLER_FOR = (
+  ['Gtk3::Editable', 'insert-text'],
+  ['Gtk3::Dialog',   'response',    \&Gtk3::Dialog::_gtk3_perl_response_converter],
+  ['Gtk3::InfoBar',  'response',    \&Gtk3::Dialog::_gtk3_perl_response_converter],
+);
+
+my $_GTK_RESPONSE_ID_TO_NICK = sub {
+  my ($id) = @_;
+  {
+    local $@;
+    my $nick = eval { Glib::Object::Introspection->convert_enum_to_sv (
+                        'Gtk3::ResponseType', $id) };
+    if (defined $nick) {
+      return $nick;
+    }
+  }
+  return $id;
+};
+my $_GTK_RESPONSE_NICK_TO_ID = sub {
+  my ($nick) = @_;
+  {
+    local $@;
+    my $id = eval { Glib::Object::Introspection->convert_sv_to_enum (
+                      'Gtk3::ResponseType', $nick) };
+    if (defined $id) {
+      return $id;
+    }
+  }
+  return $nick;
+};
+# Converter for the "response" signal.
+sub Gtk3::Dialog::_gtk3_perl_response_converter {
+  my ($dialog, $id) = @_;
+  return ($dialog, $_GTK_RESPONSE_ID_TO_NICK->($id));
+}
 
 # - gdk customization ------------------------------------------------------- #
 
@@ -78,7 +121,7 @@ my %_GDK_REBLESSERS = (
   'Gtk3::Gdk::Event' => \&Gtk3::Gdk::Event::_rebless,
 );
 
-my %_GDK_TYPE_TO_PACKAGE = (
+my %_GDK_EVENT_TYPE_TO_PACKAGE = (
   'expose' => 'Expose',
   'motion-notify' => 'Motion',
   'button-press' => 'Button',
@@ -123,7 +166,7 @@ my %_GDK_TYPE_TO_PACKAGE = (
 {
   no strict qw(refs);
   my %seen;
-  foreach (grep { !$seen{$_}++ } values %_GDK_TYPE_TO_PACKAGE) {
+  foreach (grep { !$seen{$_}++ } values %_GDK_EVENT_TYPE_TO_PACKAGE) {
     push @{'Gtk3::Gdk::Event' . $_ . '::ISA'}, 'Gtk3::Gdk::Event';
   }
 }
@@ -131,8 +174,8 @@ my %_GDK_TYPE_TO_PACKAGE = (
 sub Gtk3::Gdk::Event::_rebless {
   my ($event) = @_;
   my $package = 'Gtk3::Gdk::Event';
-  if (exists $_GDK_TYPE_TO_PACKAGE{$event->type}) {
-    $package .= $_GDK_TYPE_TO_PACKAGE{$event->type};
+  if (exists $_GDK_EVENT_TYPE_TO_PACKAGE{$event->type}) {
+    $package .= $_GDK_EVENT_TYPE_TO_PACKAGE{$event->type};
   }
   return bless $event, $package;
 }
@@ -154,7 +197,8 @@ sub import {
     package => $_GTK_PACKAGE,
     name_corrections => \%_GTK_NAME_CORRECTIONS,
     flatten_array_ref_return_for => \@_GTK_FLATTEN_ARRAY_REF_RETURN_FOR,
-    handle_sentinel_boolean_for => \@_GTK_HANDLE_SENTINEL_BOOLEAN_FOR);
+    handle_sentinel_boolean_for => \@_GTK_HANDLE_SENTINEL_BOOLEAN_FOR,
+    use_generic_signal_marshaller_for => \@_GTK_USE_GENERIC_SIGNAL_MARSHALLER_FOR);
 
   Glib::Object::Introspection->setup (
     basename => $_GDK_BASENAME,
@@ -176,6 +220,13 @@ sub import {
 
   Glib::Object::Introspection->_register_boxed_synonym (
     "cairo", "RectangleInt", "gdk_rectangle_get_type");
+
+  # FIXME: This uses an undocumented interface for overloading to avoid the
+  # need for a package declaration.
+  Gtk3::Gdk::Atom->overload::OVERLOAD (
+    '==' => sub { ${$_[0]} == ${$_[1]} },
+    '!=' => sub { ${$_[0]} != ${$_[1]} },
+    fallback => 1);
 
   my $init = 0;
   my @unknown_args = ($class);
@@ -207,6 +258,19 @@ sub Gtk3::check_version {
                                        @_ == 4 ? @_[1..3] : @_);
 }
 
+# Names "STOP" and "PROPAGATE" here are per the GtkWidget event signal
+# descriptions.  In some other flavours of signals the jargon is "handled"
+# instead of "stop".  "Handled" matches g_signal_accumulator_true_handled(),
+# though that function doesn't rate a mention in the Gtk docs.  There's
+# nothing fixed in the idea of "true means cease emission" (whether it's
+# called "stop" or "handled").  You can just as easily have false for cease
+# (the way the underlying GSignalAccumulator func in fact operates).  The
+# upshot being don't want to attempt to be too universal with the names
+# here; "EVENT" is meant to hint at the context or signal flavour they're
+# for use with.
+sub Gtk3::EVENT_PROPAGATE() { !1 };
+sub Gtk3::EVENT_STOP() { 1 };
+
 sub Gtk3::init {
   my $rest = Glib::Object::Introspection->invoke (
                $_GTK_BASENAME, undef, 'init',
@@ -226,6 +290,11 @@ sub Gtk3::init_check {
 sub Gtk3::main {
   # Ignore any arguments passed in.
   Glib::Object::Introspection->invoke ($_GTK_BASENAME, undef, 'main');
+}
+
+sub Gtk3::main_level {
+  # Ignore any arguments passed in.
+  return Glib::Object::Introspection->invoke ($_GTK_BASENAME, undef, 'main_level');
 }
 
 sub Gtk3::main_quit {
@@ -251,10 +320,8 @@ sub Gtk3::main_quit {
 
     if (!$dialog) {
       $dialog = Gtk3::AboutDialog->new;
-      $dialog->signal_connect (delete_event => \&Gtk3::Widget::hide_on_delete);
-      # FIXME: We can't actually do this fully correctly, because the license
-      # and credits subdialogs are private.
-      $dialog->signal_connect (response => \&Gtk3::Widget::hide);
+      $dialog->signal_connect (delete_event => sub { $dialog->hide_on_delete });
+      $dialog->signal_connect (response => sub { $dialog->hide });
       foreach my $prop (keys %props) {
         $dialog->set ($prop => $props{$prop});
       }
@@ -366,7 +433,7 @@ sub Gtk3::ActionGroup::add_toggle_actions {
 
     my $action = Gtk3::ToggleAction->new (
       $name, $label, $tooltip, $stock_id);
-    $action->set_active ($is_active);
+    $action->set_active ($is_active) if defined $is_active;
 
     if ($callback) {
       $action->signal_connect ('activate', $callback, $user_data);
@@ -458,14 +525,14 @@ sub Gtk3::Builder::add_objects_from_string {
   my $ref = _rest_to_ref (\@rest);
   return Glib::Object::Introspection->invoke (
     $_GTK_BASENAME, 'Builder', 'add_objects_from_string',
-    $builder, $string, length $string, $ref);
+    $builder, $string, -1, $ref); # wants length in bytes
 }
 
 sub Gtk3::Builder::add_from_string {
   my ($builder, $string) = @_;
   return Glib::Object::Introspection->invoke (
     $_GTK_BASENAME, 'Builder', 'add_from_string',
-    $builder, $string, length $string);
+    $builder, $string, -1); # wants length in bytes
 }
 
 # Copied from Gtk2.pm
@@ -540,13 +607,24 @@ sub Gtk3::Builder::connect_signals {
   }
 }
 
-sub Gtk3::Button::new {
-  my ($class, $label) = @_;
-  if (defined $label) {
-    return $class->new_with_mnemonic ($label);
-  } else {
-    return Glib::Object::Introspection->invoke (
-      $_GTK_BASENAME, 'Button', 'new', @_);
+{
+  no strict 'refs';
+  my @button_classes = ([Button => 'new_with_mnemonic'],
+                        [CheckButton => 'new_with_mnemonic'],
+                        [ColorButton => 'new_with_color'],
+                        [FontButton => 'new_with_font'],
+                        [ToggleButton => 'new_with_mnemonic']);
+  foreach my $button_pair (@button_classes) {
+    my ($button_class, $button_ctor) = @$button_pair;
+    *{'Gtk3::' . $button_class . '::new'} = sub {
+      my ($class, $thing) = @_;
+      if (defined $thing) {
+        return $class->$button_ctor ($thing);
+      } else {
+        return Glib::Object::Introspection->invoke (
+          $_GTK_BASENAME, $button_class, 'new', @_);
+      }
+    }
   }
 }
 
@@ -559,11 +637,147 @@ sub Gtk3::CheckMenuItem::new {
     $_GTK_BASENAME, 'CheckMenuItem', 'new', @_);
 }
 
+sub Gtk3::Container::get_focus_chain {
+  my ($container) = @_;
+  my ($is_set, $widgets) = Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'Container', 'get_focus_chain',
+    $container);
+  return () unless $is_set;
+  return @$widgets;
+}
+
+sub Gtk3::Container::set_focus_chain {
+  my ($container, @rest) = @_;
+  return Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'Container', 'set_focus_chain',
+    $container, _rest_to_ref (\@rest));
+}
+
 sub Gtk3::CssProvider::load_from_data {
   my ($self, $data) = @_;
   return Glib::Object::Introspection->invoke (
     $_GTK_BASENAME, 'CssProvider', 'load_from_data',
     $self, _unpack_unless_array_ref ($data));
+}
+
+# Gtk3::Dialog / Gtk3::InfoBar methods due to overlap
+{
+  no strict qw(refs);
+  foreach my $dialog_package (qw/Dialog InfoBar/) {
+    *{'Gtk3::' . $dialog_package . '::add_action_widget'} = sub {
+      Glib::Object::Introspection->invoke (
+        $_GTK_BASENAME, $dialog_package, 'add_action_widget',
+        $_[0], $_[1], $_GTK_RESPONSE_NICK_TO_ID->($_[2]));
+    };
+    *{'Gtk3::' . $dialog_package . '::add_button'} = sub {
+      Glib::Object::Introspection->invoke (
+        $_GTK_BASENAME, $dialog_package, 'add_button',
+        $_[0], $_[1], $_GTK_RESPONSE_NICK_TO_ID->($_[2]));
+    };
+    *{'Gtk3::' . $dialog_package . '::add_buttons'} = sub {
+      my ($dialog, @rest) = @_;
+      for (my $i = 0; $i < @rest; $i += 2) {
+        $dialog->add_button ($rest[$i], $rest[$i+1]);
+      }
+    };
+    *{'Gtk3::' . $dialog_package . '::response'} = sub {
+      return Glib::Object::Introspection->invoke (
+        $_GTK_BASENAME, $dialog_package, 'response',
+        $_[0], $_GTK_RESPONSE_NICK_TO_ID->($_[1]));
+    };
+    *{'Gtk3::' . $dialog_package . '::set_default_response'} = sub {
+      Glib::Object::Introspection->invoke (
+        $_GTK_BASENAME, $dialog_package, 'set_default_response',
+        $_[0], $_GTK_RESPONSE_NICK_TO_ID->($_[1]));
+    };
+    *{'Gtk3::' . $dialog_package . '::set_response_sensitive'} = sub {
+      Glib::Object::Introspection->invoke (
+        $_GTK_BASENAME, $dialog_package, 'set_response_sensitive',
+        $_[0], $_GTK_RESPONSE_NICK_TO_ID->($_[1]), $_[2]);
+    };
+  }
+}
+
+sub Gtk3::Dialog::get_response_for_widget {
+  my $id = Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'Dialog', 'get_response_for_widget', @_);
+  return $_GTK_RESPONSE_ID_TO_NICK->($id);
+}
+
+sub Gtk3::Dialog::get_widget_for_response {
+  return Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'Dialog', 'get_widget_for_response',
+    $_[0], $_GTK_RESPONSE_NICK_TO_ID->($_[1]));
+}
+
+sub Gtk3::Dialog::new {
+  my ($class, $title, $parent, $flags, @rest) = @_;
+  if (@_ == 1) {
+    return Glib::Object::Introspection->invoke (
+      $_GTK_BASENAME, 'Dialog', 'new', @_);
+  } elsif ((@_ < 4) || (@rest % 2)){
+    croak ("Usage: Gtk3::Dialog->new ()\n" .
+           "  or Gtk3::Dialog->new (TITLE, PARENT, FLAGS, ...)\n" .
+           "  where ... is a series of button text and response id pairs");
+  } else {
+    my $dialog = Gtk3::Dialog->new;
+    defined $title and $dialog->set_title ($title);
+    defined $parent and $dialog->set_transient_for ($parent);
+    $flags & 'modal' and $dialog->set_modal (Glib::TRUE);
+    $flags & 'destroy-with-parent' and $dialog->set_destroy_with_parent (Glib::TRUE);
+    $dialog->add_buttons (@rest);
+    return $dialog;
+  }
+}
+
+sub Gtk3::Dialog::new_with_buttons {
+  &Gtk3::Dialog::new;
+}
+
+sub Gtk3::Dialog::run {
+  my $id = Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'Dialog', 'run', @_);
+  return $_GTK_RESPONSE_ID_TO_NICK->($id);
+}
+
+sub Gtk3::Dialog::set_alternative_button_order {
+  my ($dialog, @rest) = @_;
+  return unless @rest;
+  Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'Dialog', 'set_alternative_button_order_from_array',
+    $dialog, [map { $_GTK_RESPONSE_NICK_TO_ID->($_) } @rest]);
+}
+
+sub Gtk3::Editable::insert_text {
+  return Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'Editable', 'insert_text',
+    @_ == 4 ? @_ : (@_[0,1], -1, $_[2])); # wants length in bytes
+}
+
+sub Gtk3::FileChooserDialog::new {
+  my ($class, $title, $parent, $action, @varargs) = @_;
+
+  if (@varargs % 2) {
+    croak 'Usage: Gtk2::FileChooserDialog->new' .
+          ' (title, parent, action, backend, button-text =>' .
+          " response-id, ...)\n";
+  }
+
+  my $result = Glib::Object::new (
+    $class,
+    title => $title,
+    action => $action,
+  );
+
+  if ($parent) {
+    $result->set_transient_for ($parent);
+  }
+
+  for (my $i = 0; $i < @varargs; $i += 2) {
+    $result->add_button ($varargs[$i], $varargs[$i+1]);
+  }
+
+  return $result;
 }
 
 sub Gtk3::HBox::new {
@@ -583,6 +797,36 @@ sub Gtk3::ImageMenuItem::new {
     $_GTK_BASENAME, 'ImageMenuItem', 'new', @_);
 }
 
+sub Gtk3::InfoBar::new {
+  my ($class, @buttons) = @_;
+  if (@_ == 1) {
+    return Glib::Object::Introspection->invoke (
+      $_GTK_BASENAME, 'InfoBar', 'new', @_);
+  } elsif (@buttons % 2) {
+    croak "Usage: Gtk3::InfoBar->new_with_buttons (button-text => response_id, ...)\n";
+  } else {
+    my $infobar = Gtk3::InfoBar->new;
+    for (my $i = 0; $i < @buttons; $i += 2) {
+      $infobar->add_button ($buttons[$i], $buttons[$i+1]);
+    }
+    return $infobar;
+  }
+}
+
+sub Gtk3::InfoBar::new_with_buttons {
+  &Gtk3::InfoBar::new;
+}
+
+sub Gtk3::LinkButton::new {
+  my ($class, $uri, $label) = @_;
+  if (defined $label) {
+    return Gtk3::LinkButton->new_with_label ($uri, $label);
+  } else {
+    return Glib::Object::Introspection->invoke (
+      $_GTK_BASENAME, 'LinkButton', 'new', @_);
+  }
+}
+
 sub Gtk3::ListStore::new {
   return _common_tree_model_new ('ListStore', @_);
 }
@@ -590,6 +834,25 @@ sub Gtk3::ListStore::new {
 # Reroute 'get' to Gtk3::TreeModel instead of Glib::Object.
 sub Gtk3::ListStore::get {
   return Gtk3::TreeModel::get (@_);
+}
+
+sub Gtk3::ListStore::insert_with_values {
+  my ($model, $position, @columns_and_values) = @_;
+  my ($columns, $values) = _unpack_keys_and_values (\@columns_and_values);
+  if (not defined $columns) {
+    croak ("Usage: Gtk3::ListStore::insert_with_values (\$model, \$position, \\\@columns, \\\@values)\n",
+           " -or-: Gtk3::ListStore::insert_with_values (\$model, \$position, \$column1 => \$value1, ...)");
+  }
+  my @wrapped_values = ();
+  foreach my $i (0..$#{$columns}) {
+    my $column_type = $model->get_column_type ($columns->[$i]);
+    push @wrapped_values,
+         Glib::Object::Introspection::GValueWrapper->new (
+           $column_type, $values->[$i]);
+  }
+  return Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'ListStore', 'insert_with_valuesv', # FIXME: missing rename-to annotation?
+    $model, $position, $columns, \@wrapped_values);
 }
 
 sub Gtk3::ListStore::set {
@@ -673,8 +936,106 @@ sub Gtk3::MessageDialog::new {
   }
 }
 
+sub Gtk3::RecentChooserDialog::new {
+  my ($class, $title, $parent, @buttons) = @_;
+  my $dialog = Glib::Object::new ($class, title => $title);
+  for (my $i = 0; $i < @buttons; $i += 2) {
+    $dialog->add_button ($buttons[$i], $buttons[$i+1]);
+  }
+  if (defined $parent) {
+    $dialog->set_transient_for ($parent);
+  }
+  return $dialog;
+}
+
+sub Gtk3::RecentChooserDialog::new_for_manager {
+  my ($class, $title, $parent, $mgr, @buttons) = @_;
+  my $dialog = Glib::Object::new ($class, title => $title,
+    recent_manager => $mgr);
+  for (my $i = 0; $i < @buttons; $i += 2) {
+    $dialog->add_button ($buttons[$i], $buttons[$i+1]);
+  }
+  if (defined $parent) {
+    $dialog->set_transient_for ($parent);
+  }
+  return $dialog;
+}
+
+sub Gtk3::TextBuffer::create_tag {
+  my ($buffer, $tag_name, @rest) = @_;
+  if (@rest % 2) {
+    croak ('Usage: $buffer->create_tag ($tag_name, $property1 => $value1, ...');
+  }
+  my $tag = Gtk3::TextTag->new ($tag_name);
+  my $tag_table = $buffer->get_tag_table;
+  $tag_table->add ($tag);
+  for (my $i = 2 ; $i < @rest ; $i += 2) {
+    $tag->set_property ($rest[$i], $rest[$i+1]);
+  }
+  return $tag;
+}
+
+sub Gtk3::TextBuffer::insert {
+  return Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'TextBuffer', 'insert',
+    @_ == 4 ? @_ : (@_[0,1,2], -1)); # wants length in bytes
+}
+
+sub Gtk3::TextBuffer::insert_at_cursor {
+  return Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'TextBuffer', 'insert_at_cursor',
+    @_ == 3 ? @_ : (@_[0,1], -1)); # wants length in bytes
+}
+
+sub Gtk3::TextBuffer::insert_interactive {
+  return Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'TextBuffer', 'insert_interactive',
+    @_ == 5 ? @_ : (@_[0,1,2], -1, $_[3])); # wants length in bytes
+}
+
+sub Gtk3::TextBuffer::insert_interactive_at_cursor {
+  return Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'TextBuffer', 'insert_interactive_at_cursor',
+    @_ == 4 ? @_ : (@_[0,1], -1, $_[2])); # wants length in bytes
+}
+
+sub Gtk3::TextBuffer::insert_with_tags {
+  my ($buffer, $iter, $text, @tags) = @_;
+  my $start_offset = $iter->get_offset;
+  $buffer->insert ($iter, $text);
+  my $start = $buffer->get_iter_at_offset ($start_offset);
+  foreach my $tag (@tags) {
+    $buffer->apply_tag ($tag, $start, $iter);
+  }
+}
+
+sub Gtk3::TextBuffer::insert_with_tags_by_name {
+  my ($buffer, $iter, $text, @tag_names) = @_;
+  my $start_offset = $iter->get_offset;
+  $buffer->insert ($iter, $text);
+  my $tag_table = $buffer->get_tag_table;
+  my $start = $buffer->get_iter_at_offset ($start_offset);
+  foreach my $tag_name (@tag_names) {
+    my $tag = $tag_table->lookup ($tag_name);
+    if (!$tag) {
+      warn "no tag with name $tag_name";
+    } else {
+      $buffer->apply_tag ($tag, $start, $iter);
+    }
+  }
+}
+
+sub Gtk3::TextBuffer::set_text {
+  return Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'TextBuffer', 'set_text',
+    @_ == 3 ? @_ : (@_[0,1], -1)); # wants length in bytes
+}
+
 sub Gtk3::TreeModel::get {
   my ($model, $iter, @columns) = @_;
+  if (!@columns) {
+    @columns = (0..($model->get_n_columns-1));
+  }
   my @values = map { $model->get_value ($iter, $_) } @columns;
   return @values[0..$#values];
 }
@@ -730,6 +1091,25 @@ sub Gtk3::TreeStore::get {
   return Gtk3::TreeModel::get (@_);
 }
 
+sub Gtk3::TreeStore::insert_with_values {
+  my ($model, $parent, $position, @columns_and_values) = @_;
+  my ($columns, $values) = _unpack_keys_and_values (\@columns_and_values);
+  if (not defined $columns) {
+    croak ("Usage: Gtk3::TreeStore::insert_with_values (\$model, \$parent, \$position, \\\@columns, \\\@values)\n",
+           " -or-: Gtk3::TreeStore::insert_with_values (\$model, \$parent, \$position, \$column1 => \$value1, ...)");
+  }
+  my @wrapped_values = ();
+  foreach my $i (0..$#{$columns}) {
+    my $column_type = $model->get_column_type ($columns->[$i]);
+    push @wrapped_values,
+         Glib::Object::Introspection::GValueWrapper->new (
+           $column_type, $values->[$i]);
+  }
+  return Glib::Object::Introspection->invoke (
+    $_GTK_BASENAME, 'TreeStore', 'insert_with_values',
+    $model, $parent, $position, $columns, \@wrapped_values);
+}
+
 sub Gtk3::TreeStore::set {
   return _common_tree_model_set ('TreeStore', @_);
 }
@@ -741,22 +1121,57 @@ sub Gtk3::TreeView::new {
     $_GTK_BASENAME, 'TreeView', $method, @_);
 }
 
+sub Gtk3::TreeView::insert_column_with_attributes {
+  my ($tree_view, $position, $title, $cell, @rest) = @_;
+  if (@rest % 2) {
+    croak ('Usage: $tree_view->insert_column_with_attributes (position, title, cell_renderer, attr1 => col1, ...)');
+  }
+  my $column = Gtk3::TreeViewColumn->new;
+  my $n = $tree_view->insert_column ($column, $position);
+  $column->set_title ($title);
+  $column->pack_start ($cell, Glib::TRUE);
+  for (my $i = 0; $i < @rest; $i += 2) {
+    $column->add_attribute ($cell, $rest[$i], $rest[$i+1]);
+  }
+  return $n;
+}
+
 sub Gtk3::TreeViewColumn::new_with_attributes {
-  my ($class, $title, $cell, %attr_to_column) = @_;
+  my ($class, $title, $cell, @rest) = @_;
+  if (@rest % 2) {
+    croak ('Usage: Gtk3::TreeViewColumn->new_with_attributes (title, cell_renderer, attr1 => col1, ...)');
+  }
   my $object = $class->new;
   $object->set_title ($title);
   $object->pack_start ($cell, Glib::TRUE);
-  foreach my $attr (keys %attr_to_column) {
-    $object->add_attribute ($cell, $attr, $attr_to_column{$attr});
+  for (my $i = 0; $i < @rest; $i += 2) {
+    $object->add_attribute ($cell, $rest[$i], $rest[$i+1]);
   }
   return $object;
+}
+
+# Gtk3::TreeViewColumn::set_attributes and Gtk3::CellLayout::set_attributes
+{
+  no strict 'refs';
+  foreach my $package (qw/TreeViewColumn CellLayout/) {
+    *{'Gtk3::' . $package . '::set_attributes'} = sub {
+      my ($object, $cell, @rest) = @_;
+      if (@rest % 2) {
+        croak ('Usage: $object->set_attributes (cell_renderer, attr1 => col1, ...)');
+      }
+      $object->clear_attributes ($cell);
+      for (my $i = 0; $i < @rest; $i += 2) {
+        $object->add_attribute ($cell, $rest[$i], $rest[$i+1]);
+      }
+    }
+  }
 }
 
 sub Gtk3::UIManager::add_ui_from_string {
   my ($manager, $string) = @_;
   return Glib::Object::Introspection->invoke (
     $_GTK_BASENAME, 'UIManager', 'add_ui_from_string',
-    $manager, $string, length $string);
+    $manager, $string, -1); # wants length in bytes
 }
 
 sub Gtk3::VBox::new {
@@ -776,6 +1191,38 @@ sub Gtk3::Window::new {
 
 # Gdk
 
+sub Gtk3::Gdk::RGBA::new {
+  my ($class, @rest) = @_;
+  # Handle Gtk3::Gdk::RGBA->new (r, g, b, a) specially.
+  if (4 == @rest) {
+    my %data;
+    @data{qw/red green blue alpha/} = @rest;
+    return Glib::Boxed::new ($class, \%data);
+  }
+  # Fall back to Glib::Boxed::new.
+  return Glib::Boxed::new ($class, @rest);
+}
+
+sub Gtk3::Gdk::RGBA::parse {
+  my $have_instance;
+  {
+    local $@;
+    $have_instance = eval { $_[0]->isa ('Gtk3::Gdk::RGBA') };
+  }
+  # This needs to be switched around if/when
+  # <https://bugzilla.gnome.org/show_bug.cgi?id=682125> is fixed.
+  if ($have_instance) {
+    return Glib::Object::Introspection->invoke (
+      $_GDK_BASENAME, 'RGBA', 'parse', @_);
+  } else {
+    my $instance = Gtk3::Gdk::RGBA->new;
+    my $success = Glib::Object::Introspection->invoke (
+      $_GDK_BASENAME, 'RGBA', 'parse',
+      $instance, @_);
+    return $success ? $instance : undef;
+  }
+}
+
 sub Gtk3::Gdk::Window::new {
   my ($class, $parent, $attr, $attr_mask) = @_;
   if (not defined $attr_mask) {
@@ -788,6 +1235,11 @@ sub Gtk3::Gdk::Window::new {
     if (exists $attr->{wmclass_name} && exists $attr->{wmclass_class}) { $attr_mask |= 'GDK_WA_WMCLASS' };
     if (exists $attr->{override_redirect}) { $attr_mask |= 'GDK_WA_NOREDIR' };
     if (exists $attr->{type_hint}) { $attr_mask |= 'GDK_WA_TYPE_HINT' };
+    if (!Gtk3::CHECK_VERSION (3, 6, 0)) {
+      # Before 3.6, the attribute mask parameter lacked proper annotations, hence
+      # we numerify it here.  FIXME: This breaks encapsulation.
+      $attr_mask = $$attr_mask;
+    }
   }
   return Glib::Object::Introspection->invoke (
     $_GDK_BASENAME, 'Window', 'new',
@@ -835,41 +1287,44 @@ sub Gtk3::Gdk::Pixbuf::new_from_xpm_data {
     $class, $real_data);
 }
 
+# The next three subs might have to change when
+# <https://bugzilla.gnome.org/show_bug.cgi?id=670372> is accepted.
+
 sub Gtk3::Gdk::Pixbuf::save {
   my ($pixbuf, $filename, $type, @rest) = @_;
-  my ($keys, $values) = _unpack_columns_and_values (\@rest);
+  my ($keys, $values) = _unpack_keys_and_values (\@rest);
   if (not defined $keys) {
-    croak ('Usage: $pixbuf->save ($filename, $type, \@keys, \@values)',
-           ' -or-: $pixbuf->save ($filename, $type, $key1 => $value1, ...)');
+    croak ("Usage: $pixbuf->save (\$filename, \$type, \\\@keys, \\\@values)\n",
+           " -or-: $pixbuf->save (\$filename, \$type, \$key1 => \$value1, ...)");
   }
   Glib::Object::Introspection->invoke (
-    $_GDK_PIXBUF_BASENAME, 'Pixbuf', 'save',
+    $_GDK_PIXBUF_BASENAME, 'Pixbuf', 'savev',
     $pixbuf, $filename, $type, $keys, $values);
 }
 
 sub Gtk3::Gdk::Pixbuf::save_to_buffer {
   my ($pixbuf, $type, @rest) = @_;
-  my ($keys, $values) = _unpack_columns_and_values (\@rest);
+  my ($keys, $values) = _unpack_keys_and_values (\@rest);
   if (not defined $keys) {
-    croak ('Usage: $pixbuf->save_to_buffer ($type, \@keys, \@values)',
-           ' -or-: $pixbuf->save_to_buffer ($type, $key1 => $value1, ...)');
+    croak ("Usage: $pixbuf->save_to_buffer (\$type, \\\@keys, \\\@values)\n",
+           " -or-: $pixbuf->save_to_buffer (\$type, \$key1 => \$value1, ...)");
   }
   my (undef, $buffer) =
     Glib::Object::Introspection->invoke (
-      $_GDK_PIXBUF_BASENAME, 'Pixbuf', 'save_to_buffer',
+      $_GDK_PIXBUF_BASENAME, 'Pixbuf', 'save_to_bufferv',
       $pixbuf, $type, $keys, $values);
   return $buffer;
 }
 
 sub Gtk3::Gdk::Pixbuf::save_to_callback {
   my ($pixbuf, $save_func, $user_data, $type, @rest) = @_;
-  my ($keys, $values) = _unpack_columns_and_values (\@rest);
+  my ($keys, $values) = _unpack_keys_and_values (\@rest);
   if (not defined $keys) {
-    croak ('Usage: $pixbuf->save_to_callback ($save_func, $user_data, $type, \@keys, \@values)',
-           ' -or-: $pixbuf->save_to_callback ($save_func, $user_data, $type, $key1 => $value1, ...)');
+    croak ("Usage: $pixbuf->save_to_callback (\$save_func, \$user_data, \$type, \\\@keys, \\\@values)\n",
+           " -or-: $pixbuf->save_to_callback (\$save_func, \$user_data, \$type, \$key1 => \$value1, ...)");
   }
   Glib::Object::Introspection->invoke (
-    $_GDK_PIXBUF_BASENAME, 'Pixbuf', 'save_to_callback',
+    $_GDK_PIXBUF_BASENAME, 'Pixbuf', 'save_to_callbackv',
     $pixbuf, $save_func, $user_data, $type, $keys, $values);
 }
 
@@ -891,10 +1346,10 @@ sub _common_tree_model_new {
 
 sub _common_tree_model_set {
   my ($package, $model, $iter, @columns_and_values) = @_;
-  my ($columns, $values) = _unpack_columns_and_values (\@columns_and_values);
+  my ($columns, $values) = _unpack_keys_and_values (\@columns_and_values);
   if (not defined $columns) {
-    croak ('Usage: Gtk3::${package}::set ($store, \@columns, \@values)',
-           ' -or-: Gtk3::${package}::set ($store, $column1 => $value1, ...)');
+    croak ("Usage: Gtk3::${package}::set (\$model, \$iter, \\\@columns, \\\@values)\n",
+           " -or-: Gtk3::${package}::set (\$model, \$iter, \$column1 => \$value1, ...)");
   }
   my @wrapped_values = ();
   foreach my $i (0..$#{$columns}) {
@@ -908,26 +1363,26 @@ sub _common_tree_model_set {
     $model, $iter, $columns, \@wrapped_values);
 }
 
-sub _unpack_columns_and_values {
-  my ($columns_and_values) = @_;
-  my (@columns, @values);
+sub _unpack_keys_and_values {
+  my ($keys_and_values) = @_;
+  my (@keys, @values);
   my $have_array_refs;
   {
     local $@;
     $have_array_refs =
-      @$columns_and_values == 2 && eval { @{$columns_and_values->[0]} };
+      @$keys_and_values == 2 && eval { @{$keys_and_values->[0]} };
   }
   if ($have_array_refs) {
-    @columns = @{$columns_and_values->[0]};
-    @values = @{$columns_and_values->[1]};
-  } elsif (@$columns_and_values % 2 == 0) {
-    my %cols_to_vals = @$columns_and_values;
-    @columns = keys %cols_to_vals;
-    @values = values %cols_to_vals;
+    @keys = @{$keys_and_values->[0]};
+    @values = @{$keys_and_values->[1]};
+  } elsif (@$keys_and_values % 2 == 0) {
+    my %keys_to_vals = @$keys_and_values;
+    @keys = keys %keys_to_vals;
+    @values = values %keys_to_vals;
   } else {
     return ();
   }
-  return (\@columns, \@values);
+  return (\@keys, \@values);
 }
 
 sub _unpack_unless_array_ref {
@@ -1013,12 +1468,47 @@ Gtk2::Gdk::Keysyms{XYZ} >>, use C<< Gtk3::Gdk::KEY_XYZ >>.
 the namespace "Pango" everywhere.  It gets set up automatically when loading
 L<Gtk3>.
 
-=item * The types Gtk2::Allocation and Gtk2::Gdk::Rectangle are now aliases for
+=item * The types Gtk3::Allocation and Gtk3::Gdk::Rectangle are now aliases for
 Cairo::RectangleInt, and as such they are represented as plain hashes with
 keys 'width', 'height', 'x' and 'y'.
 
-=item * The Gtk3::Menu menu position callback passed to popup() does not
-receive x and y parameters anymore.
+=item * Gtk3::Editable: Callbacks connected to the "insert-text" signal do not
+have as many options anymore as they had in Gtk2.  Changes to arguments will
+not be propagated to the next signal handler, and only the updated position can
+and must be returned.
+
+=item * Gtk3::Menu: The position callback passed to popup() does not receive x
+and y parameters anymore.
+
+=item * Gtk3::TreeModel: iter_next() is now a method that is modifying the iter
+directly, instead of returning a new one.  rows_reordered() and the
+"rows-reordered" signal are currently unusable.
+
+=item * Gtk3::TreeSelection: get_selected_rows() now returns two values: an
+array ref containing the selected paths, and the model.  get_user_data() is not
+available currently.
+
+=item * Gtk3::TreeSortable: get_sort_column_id() has an additional boolean
+return value.
+
+=item * Gtk3::TreeStore, Gtk3::ListStore: reorder() is currently unusable.
+
+=item * Gtk3::Gdk::Atom: The constructor new() is not provided anymore, and the
+class function intern() must now be called as C<< Gtk3::Gdk::Atom::intern
+(name, only_if_exists) >>.
+
+=item * Implementations of Gtk3::TreeModel: Gtk3::TreeIter now has a
+constructor called new() expecting C<< key => value >> pairs;
+new_from_arrayref() does not exist anymore.  To access the contents of
+Gtk3::TreeIter, use stamp(), user_data(), user_data2() and user_data3();
+to_arrayref() does not exist anymore.  GET_ITER(), ITER_CHILDREN(),
+ITER_NTH_CHILD() and ITER_PARENT() must return an additional boolean value.
+ITER_NEXT() must modify the iter and return a boolean rather than return a new
+iter.  GET_VALUE() must return the value wrapped with C<<
+Glib::Object::Introspection::GValueWrapper->new >>.
+
+=item * Implementations of Gtk3::CellLayout: GET_CELLS() now needs to return an
+array ref instead of a list.
 
 =back
 
@@ -1048,7 +1538,7 @@ remove them.
 
 =head1 COPYRIGHT AND LICENSE
 
-Copyright (C) 2011-2012 by Torsten Schoenfeld <kaffeetisch@gmx.de>
+Copyright (C) 2011-2013 by Torsten Schoenfeld <kaffeetisch@gmx.de>
 
 This library is free software; you can redistribute it and/or modify it under
 the terms of the GNU Library General Public License as published by the Free
