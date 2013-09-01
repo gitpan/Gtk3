@@ -1,6 +1,6 @@
 package Gtk3;
 {
-  $Gtk3::VERSION = '0.009';
+  $Gtk3::VERSION = '0.010';
 }
 
 use strict;
@@ -554,7 +554,7 @@ sub Gtk3::Builder::connect_signals {
     # care of that for us in all cases, so we only have signal_connect.
     # if we get a connect_object, just use that instead of user_data.
     $object->$func($signal_name => $handler,
-                   $connect_object ? $connect_object : $user_data);
+                   $connect_object || $user_data);
   };
 
   # $builder->connect_signals ($user_data)
@@ -782,8 +782,8 @@ sub Gtk3::FileChooserDialog::new {
 
 sub Gtk3::HBox::new {
   my ($class, $homogeneous, $spacing) = @_;
-  $homogeneous = 5 unless defined $homogeneous;
-  $spacing = 0 unless defined $spacing;
+  $homogeneous = 0 unless defined $homogeneous;
+  $spacing = 5 unless defined $spacing;
   return Glib::Object::Introspection->invoke (
     $_GTK_BASENAME, 'HBox', 'new', $class, $homogeneous, $spacing);
 }
@@ -932,7 +932,7 @@ sub Gtk3::MessageDialog::new {
       return Glib::Object::Introspection->invoke (
         $_GTK_BASENAME, 'RadioMenuItem', $real_ctor,
         $class, $group_or_member, @rest);
-    }
+    };
   }
 }
 
@@ -969,7 +969,7 @@ sub Gtk3::TextBuffer::create_tag {
   my $tag = Gtk3::TextTag->new ($tag_name);
   my $tag_table = $buffer->get_tag_table;
   $tag_table->add ($tag);
-  for (my $i = 2 ; $i < @rest ; $i += 2) {
+  for (my $i = 0 ; $i < @rest ; $i += 2) {
     $tag->set_property ($rest[$i], $rest[$i+1]);
   }
   return $tag;
@@ -1176,8 +1176,8 @@ sub Gtk3::UIManager::add_ui_from_string {
 
 sub Gtk3::VBox::new {
   my ($class, $homogeneous, $spacing) = @_;
-  $homogeneous = 5 unless defined $homogeneous;
-  $spacing = 0 unless defined $spacing;
+  $homogeneous = 0 unless defined $homogeneous;
+  $spacing = 5 unless defined $spacing;
   return Glib::Object::Introspection->invoke (
     $_GTK_BASENAME, 'VBox', 'new', $class, $homogeneous, $spacing);
 }
@@ -1227,17 +1227,18 @@ sub Gtk3::Gdk::Window::new {
   my ($class, $parent, $attr, $attr_mask) = @_;
   if (not defined $attr_mask) {
     $attr_mask = Gtk3::Gdk::WindowAttributesType->new ([]);
-    if (exists $attr->{title}) { $attr_mask |= 'GDK_WA_TITLE' };
-    if (exists $attr->{x}) { $attr_mask |= 'GDK_WA_X' };
-    if (exists $attr->{y}) { $attr_mask |= 'GDK_WA_Y' };
-    if (exists $attr->{cursor}) { $attr_mask |= 'GDK_WA_CURSOR' };
-    if (exists $attr->{visual}) { $attr_mask |= 'GDK_WA_VISUAL' };
-    if (exists $attr->{wmclass_name} && exists $attr->{wmclass_class}) { $attr_mask |= 'GDK_WA_WMCLASS' };
-    if (exists $attr->{override_redirect}) { $attr_mask |= 'GDK_WA_NOREDIR' };
-    if (exists $attr->{type_hint}) { $attr_mask |= 'GDK_WA_TYPE_HINT' };
-    if (!Gtk3::CHECK_VERSION (3, 6, 0)) {
-      # Before 3.6, the attribute mask parameter lacked proper annotations, hence
-      # we numerify it here.  FIXME: This breaks encapsulation.
+    if (exists $attr->{title})                                         { $attr_mask |= 'GDK_WA_TITLE' }
+    if (exists $attr->{x})                                             { $attr_mask |= 'GDK_WA_X' }
+    if (exists $attr->{y})                                             { $attr_mask |= 'GDK_WA_Y' }
+    if (exists $attr->{cursor})                                        { $attr_mask |= 'GDK_WA_CURSOR' }
+    if (exists $attr->{visual})                                        { $attr_mask |= 'GDK_WA_VISUAL' }
+    if (exists $attr->{wmclass_name} && exists $attr->{wmclass_class}) { $attr_mask |= 'GDK_WA_WMCLASS' }
+    if (exists $attr->{override_redirect})                             { $attr_mask |= 'GDK_WA_NOREDIR' }
+    if (exists $attr->{type_hint})                                     { $attr_mask |= 'GDK_WA_TYPE_HINT' }
+    if (!Gtk3::CHECK_VERSION (3, 4, 4)) {
+      # Before 3.4.4 or 3.5.6, the attribute mask parameter lacked proper
+      # annotations, hence we numerify it here.  FIXME: This breaks
+      # encapsulation.
       $attr_mask = $$attr_mask;
     }
   }

@@ -7,7 +7,7 @@ use warnings;
 use utf8;
 use Encode;
 
-plan tests => 147;
+plan tests => 159;
 
 # Gtk3::CHECK_VERSION and check_version
 {
@@ -44,6 +44,15 @@ plan tests => 147;
   Gtk3::show_about_dialog (Gtk3::Window->new, %props);
   Gtk3->show_about_dialog (Gtk3::Window->new, %props);
   ok (1);
+}
+
+# Gtk3::[HV]Box
+{
+  foreach my $class (qw/HBox VBox/) {
+    my $box = "Gtk3::$class"->new;
+    ok (!$box->get_homogeneous);
+    is ($box->get_spacing, 5);
+  }
 }
 
 # Gtk3::Button::new
@@ -499,7 +508,9 @@ __EOD__
 }
 
 # Gtk3::Gdk::Atom
-{
+SKIP: {
+  skip 'atom stuff; missing annotations', 2
+    unless Gtk3::CHECK_VERSION(3, 2, 0);
   my $atom1 = Gtk3::Gdk::Atom::intern("CLIPBOARD", Glib::FALSE);
   my $atom2 = Gtk3::Gdk::Atom::intern("CLIPBOARD", Glib::FALSE);
   my $atom3 = Gtk3::Gdk::Atom::intern("PRIMARY", Glib::FALSE);
@@ -563,7 +574,7 @@ SKIP: {
 
 # Gtk3::Gdk::Pixbuf::new_from_data
 SKIP: {
-  skip 'Gtk3::Gdk::Pixbuf; new_from_data has incorrect annotations', 2;
+  skip 'Gtk3::Gdk::Pixbuf::new_from_data; incorrect annotations', 2;
 
   my ($width, $height) = (45, 89);
   my ($r, $g, $b) = (255, 0, 255);
@@ -576,13 +587,16 @@ SKIP: {
 
 # Gtk3::Gdk::Pixbuf::save, save_to_buffer, save_to_callback
 SKIP: {
+  skip 'pixbuf stuff; missing annotations', 19
+    unless Gtk3::Gdk::PIXBUF_MINOR >= 25;
+
   my ($width, $height) = (10, 5);
   my $pixbuf = Gtk3::Gdk::Pixbuf->new ('rgb', Glib::TRUE, 8, $width, $height);
   $pixbuf->fill (hex '0xFF000000');
   my $expected_pixels = $pixbuf->get_pixels;
 
   my $filename = 'testsave.png';
-  END { unlink $filename; }
+  END { unlink $filename if defined $filename; }
   eval {
     $pixbuf->save ($filename, 'png',
                    'key_arg_without_value_arg');
@@ -601,9 +615,10 @@ SKIP: {
   is ($new_pixbuf->get_height, $height);
   is ($new_pixbuf->get_pixels, $expected_pixels);
 
-  my $buffer = eval {
+  my $buffer = do {
     $pixbuf->save_to_buffer ('png', [qw/compression/], [9]);
     $pixbuf->save_to_buffer ('png', compression => 9);
+    $pixbuf->save_to_buffer ('png');
   };
   ok (defined $buffer, 'save_to_buffer');
   my $loader = Gtk3::Gdk::PixbufLoader->new;
@@ -614,10 +629,28 @@ SKIP: {
   is ($new_pixbuf->get_height, $height);
   is ($new_pixbuf->get_pixels, $expected_pixels);
 
-  # FIXME: callbacks with automatic args not supported yet.
-  #$pixbuf->save_to_callback (sub {
-  #  my ($pixels, $length, $data) = @_;
-  #  warn join ', ', @$pixels;
-  #  return Glib::TRUE, undef;
-  #}, 'data', 'png');
+  my $callback_buffer = [];
+  my $invocation_count = 0;
+  ok ($pixbuf->save_to_callback (sub {
+    my ($pixels, $length, $data) = @_;
+    if (0 == $invocation_count++) {
+      is ($length, scalar @$pixels);
+      is ($pixels->[0], 137); is ($pixels->[7], 10); # PNG header
+      is ($data, 'data');
+    }
+    push @$callback_buffer, @$pixels;
+    return Glib::TRUE, undef;
+  }, 'data', 'png'));
+  is_deeply ($callback_buffer, $buffer);
+
+  skip 'Gtk3::Gdk::Pixbuf::save_to_callback; need error domain support', 2
+    unless check_gi_version (1, 29, 17);
+  eval {
+    $pixbuf->save_to_callback (sub {
+      return Glib::FALSE, Gtk3::Gdk::PixbufError->new ('insufficient-memory', 'buzz');
+    }, undef, 'png');
+  };
+  my $error = $@;
+  isa_ok ($error, 'Glib::Error');
+  is ($error->message, 'buzz');
 }
