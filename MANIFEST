@@ -20,6 +20,7 @@ t/zz-GtkCellLayoutIface.t
 t/zz-GtkCellRendererIface.t
 t/zz-GtkContainer.t
 t/zz-GtkDialog.t
+t/zz-GtkImage.t
 t/zz-GtkInfoBar.t
 t/zz-GtkRadioMenuItem.t
 t/zz-GtkRecentChooserDialog.t

@@ -1,6 +1,6 @@
 package Gtk3;
 {
-  $Gtk3::VERSION = '0.011';
+  $Gtk3::VERSION = '0.012';
 }
 
 use strict;
@@ -73,15 +73,14 @@ my @_GTK_USE_GENERIC_SIGNAL_MARSHALLER_FOR = (
   ['Gtk3::InfoBar',  'response',    \&Gtk3::Dialog::_gtk3_perl_response_converter],
 );
 
+# GtkResponseType: id <-> nick
 my $_GTK_RESPONSE_ID_TO_NICK = sub {
   my ($id) = @_;
   {
     local $@;
     my $nick = eval { Glib::Object::Introspection->convert_enum_to_sv (
                         'Gtk3::ResponseType', $id) };
-    if (defined $nick) {
-      return $nick;
-    }
+    return $nick if defined $nick;
   }
   return $id;
 };
@@ -91,17 +90,46 @@ my $_GTK_RESPONSE_NICK_TO_ID = sub {
     local $@;
     my $id = eval { Glib::Object::Introspection->convert_sv_to_enum (
                       'Gtk3::ResponseType', $nick) };
-    if (defined $id) {
-      return $id;
-    }
+    return $id if defined $id;
   }
   return $nick;
 };
-# Converter for the "response" signal.
+
+# Converter for GtkDialog's "response" signal.
 sub Gtk3::Dialog::_gtk3_perl_response_converter {
   my ($dialog, $id) = @_;
   return ($dialog, $_GTK_RESPONSE_ID_TO_NICK->($id));
 }
+
+# GtkIconSize: id <-> nick
+my $_GTK_ICON_SIZE_ID_TO_NICK = sub {
+  my ($id) = @_;
+  {
+    local $@;
+    my $nick = eval { Glib::Object::Introspection->convert_enum_to_sv (
+                        'Gtk3::IconSize', $id) };
+    return $nick if defined $nick;
+  }
+  {
+    my $nick = Gtk3::IconSize::get_name ($id);
+    return $nick if defined $nick;
+  }
+  return $id;
+};
+my $_GTK_ICON_SIZE_NICK_TO_ID = sub {
+  my ($nick) = @_;
+  {
+    local $@;
+    my $id = eval { Glib::Object::Introspection->convert_sv_to_enum (
+                      'Gtk3::IconSize', $nick) };
+    return $id if defined $id;
+  }
+  {
+    my $id = Gtk3::IconSize::from_name ($nick);
+    return $id if $id;# if it's not zero
+  }
+  return $nick;
+};
 
 # - gdk customization ------------------------------------------------------- #
 
@@ -788,6 +816,35 @@ sub Gtk3::HBox::new {
     $_GTK_BASENAME, 'HBox', 'new', $class, $homogeneous, $spacing);
 }
 
+# Gtk3::Image
+{
+  no strict qw(refs);
+  foreach my $ctor (qw/new_from_stock new_from_icon_set new_from_icon_name new_from_gicon/) {
+    *{'Gtk3::Image::' . $ctor} = sub {
+      my ($class, $thing, $size) = @_;
+      return Glib::Object::Introspection->invoke (
+        $_GTK_BASENAME, 'Image', $ctor, $class, $thing,
+        $_GTK_ICON_SIZE_NICK_TO_ID->($size));
+    }
+  }
+  foreach my $getter (qw/get_stock get_icon_set get_icon_name get_gicon/) {
+    *{'Gtk3::Image::' . $getter} = sub {
+      my ($image) = @_;
+      my ($thing, $size) = Glib::Object::Introspection->invoke (
+        $_GTK_BASENAME, 'Image', $getter, $image);
+      return ($thing, $_GTK_ICON_SIZE_ID_TO_NICK->($size));
+    }
+  }
+  foreach my $setter (qw/set_from_stock set_from_icon_set set_from_icon_name set_from_gicon/) {
+    *{'Gtk3::Image::' . $setter} = sub {
+      my ($image, $thing, $size) = @_;
+      Glib::Object::Introspection->invoke (
+        $_GTK_BASENAME, 'Image', $setter, $image, $thing,
+        $_GTK_ICON_SIZE_NICK_TO_ID->($size));
+    }
+  }
+}
+
 sub Gtk3::ImageMenuItem::new {
   my ($class, $mnemonic) = @_;
   if (defined $mnemonic) {
@@ -1295,8 +1352,8 @@ sub Gtk3::Gdk::Pixbuf::save {
   my ($pixbuf, $filename, $type, @rest) = @_;
   my ($keys, $values) = _unpack_keys_and_values (\@rest);
   if (not defined $keys) {
-    croak ("Usage: $pixbuf->save (\$filename, \$type, \\\@keys, \\\@values)\n",
-           " -or-: $pixbuf->save (\$filename, \$type, \$key1 => \$value1, ...)");
+    croak ("Usage: \$pixbuf->save (\$filename, \$type, \\\@keys, \\\@values)\n",
+           " -or-: \$pixbuf->save (\$filename, \$type, \$key1 => \$value1, ...)");
   }
   Glib::Object::Introspection->invoke (
     $_GDK_PIXBUF_BASENAME, 'Pixbuf', 'savev',
@@ -1307,8 +1364,8 @@ sub Gtk3::Gdk::Pixbuf::save_to_buffer {
   my ($pixbuf, $type, @rest) = @_;
   my ($keys, $values) = _unpack_keys_and_values (\@rest);
   if (not defined $keys) {
-    croak ("Usage: $pixbuf->save_to_buffer (\$type, \\\@keys, \\\@values)\n",
-           " -or-: $pixbuf->save_to_buffer (\$type, \$key1 => \$value1, ...)");
+    croak ("Usage: \$pixbuf->save_to_buffer (\$type, \\\@keys, \\\@values)\n",
+           " -or-: \$pixbuf->save_to_buffer (\$type, \$key1 => \$value1, ...)");
   }
   my (undef, $buffer) =
     Glib::Object::Introspection->invoke (
@@ -1321,8 +1378,8 @@ sub Gtk3::Gdk::Pixbuf::save_to_callback {
   my ($pixbuf, $save_func, $user_data, $type, @rest) = @_;
   my ($keys, $values) = _unpack_keys_and_values (\@rest);
   if (not defined $keys) {
-    croak ("Usage: $pixbuf->save_to_callback (\$save_func, \$user_data, \$type, \\\@keys, \\\@values)\n",
-           " -or-: $pixbuf->save_to_callback (\$save_func, \$user_data, \$type, \$key1 => \$value1, ...)");
+    croak ("Usage: \$pixbuf->save_to_callback (\$save_func, \$user_data, \$type, \\\@keys, \\\@values)\n",
+           " -or-: \$pixbuf->save_to_callback (\$save_func, \$user_data, \$type, \$key1 => \$value1, ...)");
   }
   Glib::Object::Introspection->invoke (
     $_GDK_PIXBUF_BASENAME, 'Pixbuf', 'save_to_callbackv',
@@ -1389,7 +1446,7 @@ sub _unpack_keys_and_values {
 sub _unpack_unless_array_ref {
   my ($data) = @_;
   local $@;
-  return defined eval { @{$data} }
+  return eval { @{$data} }
     ? $data
     : [unpack 'C*', $data];
 }

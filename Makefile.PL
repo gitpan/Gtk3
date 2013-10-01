@@ -23,10 +23,10 @@ my %WriteMakefileArgs = (
     "Cairo::GObject" => "1.000",
     "Carp" => 0,
     "Exporter" => 0,
-    "Glib::Object::Introspection" => "0.015"
+    "Glib::Object::Introspection" => "0.016"
   },
   "TEST_REQUIRES" => {},
-  "VERSION" => "0.011",
+  "VERSION" => "0.012",
   "test" => {
     "TESTS" => "t/*.t"
   }
