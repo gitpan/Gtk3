@@ -17,4 +17,4 @@ requires:
   Carp: 0
   Exporter: 0
   Glib::Object::Introspection: 0.016
-version: 0.012
+version: 0.013
