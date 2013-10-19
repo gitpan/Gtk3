@@ -1,0 +1,46 @@
+{
+   "abstract" : "Perl interface to the 3.x series of the gtk+ toolkit",
+   "author" : [
+      "Torsten Schoenfeld <kaffeetisch@gmx.de>"
+   ],
+   "dynamic_config" : 0,
+   "generated_by" : "Dist::Zilla version 4.300039, CPAN::Meta::Converter version 2.120921",
+   "license" : [
+      "lgpl_2_1"
+   ],
+   "meta-spec" : {
+      "url" : "http://search.cpan.org/perldoc?CPAN::Meta::Spec",
+      "version" : "2"
+   },
+   "name" : "Gtk3",
+   "prereqs" : {
+      "configure" : {
+         "requires" : {
+            "ExtUtils::MakeMaker" : "6.30"
+         }
+      },
+      "runtime" : {
+         "requires" : {
+            "Cairo::GObject" : "1.000",
+            "Carp" : "0",
+            "Exporter" : "0",
+            "Glib::Object::Introspection" : "0.016"
+         }
+      }
+   },
+   "release_status" : "stable",
+   "resources" : {
+      "bugtracker" : {
+         "mailto" : "bug-Cairo [at] rt.cpan.org",
+         "web" : "http://rt.cpan.org/Public/Dist/Display.html?Name=Gtk3"
+      },
+      "homepage" : "http://gtk2-perl.sourceforge.net",
+      "repository" : {
+         "type" : "git",
+         "url" : "git://git.gnome.org/perl-Gtk3",
+         "web" : "http://git.gnome.org/browse/perl-Gtk3"
+      }
+   },
+   "version" : "0.014"
+}
+

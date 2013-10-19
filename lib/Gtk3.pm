@@ -1,6 +1,6 @@
 package Gtk3;
 {
-  $Gtk3::VERSION = '0.013';
+  $Gtk3::VERSION = '0.014';
 }
 
 use strict;
