@@ -7,7 +7,7 @@ use warnings;
 use utf8;
 use Encode;
 
-plan tests => 159;
+plan tests => 164;
 
 # Gtk3::CHECK_VERSION and check_version
 {
@@ -264,6 +264,27 @@ SKIP: {
   }
 }
 
+# Gtk3::SizeGroup
+{
+  my $group = Gtk3::SizeGroup->new ("vertical");
+
+  my @widgets = $group->get_widgets;
+  ok (!@widgets);
+
+  my ($uno, $dos, $tres, $cuatro) =
+    (Gtk3::Label->new ("Tinky-Winky"),
+     Gtk3::Label->new ("Dipsy"),
+     Gtk3::Label->new ("La La"),
+     Gtk3::Label->new ("Po"));
+
+  $group->add_widget ($uno);
+  $group->add_widget ($dos);
+  $group->add_widget ($tres);
+  $group->add_widget ($cuatro);
+  @widgets = $group->get_widgets;
+  is (scalar @widgets, 4);
+}
+
 # Gtk3::Stock
 {
   ok (grep { $_ eq 'gtk-ok' } Gtk3::Stock::list_ids ());
@@ -507,6 +528,13 @@ __EOD__
   isa_ok ($menubars[1], "Gtk3::MenuBar");
 }
 
+# Gtk3::Widget
+{
+  my $widget = Gtk3::Label->new ("Test");
+  isa_ok ($widget->render_icon ("gtk-open", "menu", "detail"),
+          "Gtk3::Gdk::Pixbuf");
+}
+
 # Gtk3::Gdk::Atom
 SKIP: {
   skip 'atom stuff; missing annotations', 2
@@ -569,7 +597,7 @@ SKIP: {
 # Gtk3::Gdk::Pixbuf::get_formats
 {
   my @formats = Gtk3::Gdk::Pixbuf::get_formats;
-  isa_ok (ref $formats[0], 'Gtk3::Gdk::PixbufFormat');
+  isa_ok ($formats[0], 'Gtk3::Gdk::PixbufFormat');
 }
 
 # Gtk3::Gdk::Pixbuf::new_from_data
@@ -653,4 +681,16 @@ SKIP: {
   my $error = $@;
   isa_ok ($error, 'Glib::Error');
   is ($error->message, 'buzz');
+}
+
+# Pango::Layout
+{
+  my $label = Gtk3::Label->new ('Bla');
+  my $layout = $label->create_pango_layout ('Bla');
+
+  $layout->set_text('Bla bla.', 3);
+  is ($layout->get_text, 'Bla');
+
+  $layout->set_text('Bla bla.');
+  is ($layout->get_text, 'Bla bla.');
 }

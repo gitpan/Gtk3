@@ -23,7 +23,10 @@ t/zz-GtkContainer.t
 t/zz-GtkDialog.t
 t/zz-GtkImage.t
 t/zz-GtkInfoBar.t
+t/zz-GtkRadioAction.t
+t/zz-GtkRadioButton.t
 t/zz-GtkRadioMenuItem.t
+t/zz-GtkRadioToolButton.t
 t/zz-GtkRecentChooserDialog.t
 t/zz-GtkTextBuffer.t
 t/zz-GtkTreeModelIface.t
