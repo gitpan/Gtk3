@@ -4,7 +4,7 @@
       "Torsten Schoenfeld <kaffeetisch@gmx.de>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 5.012, CPAN::Meta::Converter version 2.133380",
+   "generated_by" : "Dist::Zilla version 5.020, CPAN::Meta::Converter version 2.142060",
    "license" : [
       "lgpl_2_1"
    ],
@@ -16,7 +16,7 @@
    "prereqs" : {
       "configure" : {
          "requires" : {
-            "ExtUtils::MakeMaker" : "6.30"
+            "ExtUtils::MakeMaker" : "0"
          }
       },
       "runtime" : {
@@ -41,8 +41,9 @@
          "url" : "git://git.gnome.org/perl-Gtk3",
          "web" : "http://git.gnome.org/browse/perl-Gtk3"
       },
+      "x_IRC" : "irc://irc.gimp.org/#gtk-perl",
       "x_twitter" : "https://twitter.com/GTKPerl"
    },
-   "version" : "0.017"
+   "version" : "0.018"
 }
 
