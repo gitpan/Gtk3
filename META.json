@@ -4,7 +4,7 @@
       "Torsten Schoenfeld <kaffeetisch@gmx.de>"
    ],
    "dynamic_config" : 0,
-   "generated_by" : "Dist::Zilla version 5.020, CPAN::Meta::Converter version 2.142060",
+   "generated_by" : "Dist::Zilla version 5.009, CPAN::Meta::Converter version 2.133380",
    "license" : [
       "lgpl_2_1"
    ],
@@ -16,7 +16,7 @@
    "prereqs" : {
       "configure" : {
          "requires" : {
-            "ExtUtils::MakeMaker" : "0"
+            "ExtUtils::MakeMaker" : "6.30"
          }
       },
       "runtime" : {
@@ -44,6 +44,6 @@
       "x_IRC" : "irc://irc.gimp.org/#gtk-perl",
       "x_twitter" : "https://twitter.com/GTKPerl"
    },
-   "version" : "0.018"
+   "version" : "0.019"
 }
 
