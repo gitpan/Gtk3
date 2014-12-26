@@ -1,8 +1,5 @@
 package Gtk3;
-{
-  $Gtk3::VERSION = '0.019';
-}
-
+$Gtk3::VERSION = '0.020';
 use strict;
 use warnings;
 use Carp qw/croak/;
